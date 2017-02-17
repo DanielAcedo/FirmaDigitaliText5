@@ -14,6 +14,7 @@ import java.security.Security;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Scanner;
 
@@ -22,6 +23,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Rectangle;
+import com.itextpdf.text.pdf.AcroFields;
 import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.PdfSignatureAppearance;
 import com.itextpdf.text.pdf.PdfStamper;
@@ -32,6 +34,7 @@ import com.itextpdf.text.pdf.security.ExternalDigest;
 import com.itextpdf.text.pdf.security.ExternalSignature;
 import com.itextpdf.text.pdf.security.MakeSignature;
 import com.itextpdf.text.pdf.security.OcspClient;
+import com.itextpdf.text.pdf.security.PdfPKCS7;
 import com.itextpdf.text.pdf.security.PrivateKeySignature;
 import com.itextpdf.text.pdf.security.TSAClient;
 import com.itextpdf.text.pdf.security.MakeSignature.CryptoStandard;
@@ -40,10 +43,17 @@ public class Firma {
 
 	private static final String rutaCertificado = "cert/certificado.p12";
 	private static final String password = "";
-	private static final String SRC = "doc/documento.pdf";
+	private static final String SRC = "doc/documento_signed.pdf";
 	private static final String DEST = SRC.substring(0,  SRC.lastIndexOf('.')) + "_signed.pdf";
 	
 	public static void main(String[] args) throws FileNotFoundException, IOException, GeneralSecurityException, DocumentException {
+		BouncyCastleProvider provider = new BouncyCastleProvider();
+		Security.addProvider(provider);
+		
+		mainVerify();
+	}
+	
+	private static void mainSign() throws FileNotFoundException, IOException, GeneralSecurityException, DocumentException{
 		BouncyCastleProvider provider = new BouncyCastleProvider();
 		Security.addProvider(provider);
 		
@@ -71,10 +81,37 @@ public class Firma {
 		Firma app = new Firma();
 		app.sign(SRC, DEST, chain, pk, DigestAlgorithms.SHA256, 
 				provider.getName(), CryptoStandard.CMS, "Test de firma", "Malaga", null, null, null, 0);
-		
 	}
 	
-	public void sign(String src, String dest, Certificate[] chain, PrivateKey pk,
+	private static void mainVerify() throws IOException, GeneralSecurityException{
+		Firma app = new Firma();
+		app.verifySignatures(SRC);
+	}
+	
+	private PdfPKCS7 verifySignature(AcroFields fields, String name) throws GeneralSecurityException, IOException{
+		System.out.println("La firma cubre todo el documento: "+fields.signatureCoversWholeDocument(name));
+		System.out.println("Revisión #"+fields.getRevision(name)+" de "+fields.getTotalRevisions());
+		
+		PdfPKCS7 pdfPKCS7 = fields.verifySignature(name);
+		System.out.println("Verificado: "+pdfPKCS7.verify());
+		
+		return pdfPKCS7;
+	}
+	
+	private void verifySignatures(String path) throws IOException, GeneralSecurityException{
+		System.out.println(path);
+		PdfReader reader = new PdfReader(path);
+		
+		AcroFields fields = reader.getAcroFields();
+		ArrayList<String> names = fields.getSignatureNames();
+		
+		for (String name : names) {
+			System.out.println("======== "+name+" ========");
+			verifySignature(fields, name);
+		}
+	}
+	
+	private void sign(String src, String dest, Certificate[] chain, PrivateKey pk,
 			String digestAlgorithm, String provider, CryptoStandard cms, String reason, String location,
 			Collection<CrlClient> crlList, OcspClient ocspClient,
 			TSAClient tsaClient, int estimatedSize) throws GeneralSecurityException, IOException, DocumentException{
